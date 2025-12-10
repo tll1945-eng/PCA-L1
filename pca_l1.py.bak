@@ -1,0 +1,87 @@
+ # Create a random matrix of dimension DxN.
+# 	X = np.random.randn(D, N)
+# U, S, V = torch.svd_lowrank(X, q=512, niter=16)
+
+import torch
+import torch.nn.functional as F
+
+import pandas as pd
+df = pd.read_csv("/root/USArrests_subset.csv", index_col=0)
+print("data dimension:", df.shape) 
+print("head of data:") 
+print(df.head())
+
+
+
+
+#matrix_numpy 特征×样本 与论文Principal Component Analysis Based on L1-Norm Maximization一致
+matrix_numpy = df.values.T  # 此时是NumPy数组，在CPU上
+
+# 2. 转换为PyTorch Tensor，并移动到GPU
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+print(f"使用设备: {device}")
+
+# 关键步骤：转换为Tensor并指定设备
+matrix_tensor = torch.from_numpy(matrix_numpy).float().to(device)
+
+# 3. 在GPU上进行SVD分解
+U, S, Vh = torch.linalg.svd(matrix_tensor, full_matrices=False)
+
+
+# 现在 U, S, Vh 都是GPU上的Tensor
+print(f"U的设备: {U.device}")  # 应显示 'cuda:0'
+print(f"奇异值: {S[:2]}")     # 查看前2个奇异值
+
+def interate_w(X,normalized_w_col):
+    euclidean_dist = 1.0
+    threshold = 1e-6
+    while euclidean_dist > threshold:        
+        normalized_old_w_col = normalized_w_col.clone()
+        
+        outer_product_row = normalized_w_col.T @ X 
+        signs_col = torch.sign(outer_product_row).T
+        w_col =  X @ signs_col.float()
+        normalized_w_col = F.normalize(w_col, dim=0, p=2)
+        euclidean_dist = torch.norm(normalized_w_col - normalized_old_w_col, p=2)
+        
+       
+    return normalized_w_col
+
+# X = torch.from_numpy(matrix_numpy).float().to(device)
+# X = torch.tensor([[-6, -5, -4, -3, -2, 10, 0, 1, 2, 3, 4],[-5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5]]).float()
+# w = torch.tensor( [[1],
+#                   [1]]).float()      # 2行1列的列向量
+
+X = matrix_tensor
+
+
+
+
+# w_col =U[:,0:1]
+
+# normalized_w_col = F.normalize(w_col, dim=0, p=2) 
+
+normalized_w_col = U[:,0:1]               
+normalized_w_col = interate_w(X,normalized_w_col)
+# xx = interate_w(X,normalized_w)
+print("normalized w_col:", normalized_w_col)
+# print("id(xx):", id(xx),"xx:", xx)
+
+pca_dim = 2
+j = 1
+while j < pca_dim:    
+               
+    
+    tmp1_row = normalized_w_col.T @ X
+    X = X - normalized_w_col @ tmp1_row
+    # w_col =U[:,j:j+1]
+    # normalized_w_col = F.normalize(w_col, dim=0, p=2) 
+
+    normalized_w_col = U[:,j:j+1] 
+    normalized_w_col = interate_w(X,normalized_w_col)
+    j = j +1 
+
+print("normalized w_col:", normalized_w_col)
+	
+
+	
